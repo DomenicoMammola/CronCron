@@ -1,3 +1,12 @@
+// This is part of the CronCron Library
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// This software is distributed without any warranty.
+//
+// @author Domenico Mammola (mimmo71@gmail.com - www.mammola.net)
 unit ccCronTab;
 
 {$IFDEF FPC}
@@ -10,22 +19,14 @@ uses
 
 // https://help.ubuntu.com/community/CronHowto
 
+resourcestring
+  rsErrorWrongFormat = 'Wrong format of cron schedule string: %s';
+
 type
 
-  TccTaskProcedure = procedure of Object;
-
-  { TccCronTab }
-
-  TccCronTab = class
-  strict private
-    FTasksList : TObjectList;
-  public
-    constructor Create;
-    destructor Destroy; override;
-
-    procedure AddTask (const aScheduleString : String; const aTask : TccTaskProcedure);
-  end;
-
+  TCheckTerminatedProcedure = function : boolean of object;
+  TccTaskProcedureOfObject = procedure (aCheckTerminated : TCheckTerminatedProcedure) of Object;
+  TccTaskProcedure = procedure (aCheckTerminated : TCheckTerminatedProcedure);
 
   { FSchedulation }
 
@@ -52,8 +53,10 @@ type
 
   TccScheduledTask = class
   strict private
-    FTaskProcedure: TccTaskProcedure;
+    FTaskProcedureOfObject: TccTaskProcedureOfObject;
+    FTaskProcedure : TccTaskProcedure;
     FScheduleString : String;
+    FTaskDescription : String;
     FDecodedSchedule : TccSchedulation;
     procedure SetScheduleString(AValue: String);
     function CheckValue (const aString : String; const aValue : word; out aAnyValueAllowed : boolean): boolean;
@@ -63,8 +66,24 @@ type
 
     function MustRun (const aMinute, aHour, aDay, aMonth, aYear : word) : boolean;
 
+    property TaskDescription : String read FTaskDescription write FTaskDescription;
+    property TaskProcedureOfObject : TccTaskProcedureOfObject read FTaskProcedureOfObject write FTaskProcedureOfObject;
     property TaskProcedure : TccTaskProcedure read FTaskProcedure write FTaskProcedure;
     property ScheduleString : String read FScheduleString write SetScheduleString;
+  end;
+
+  { TccScheduledTasks }
+
+  TccScheduledTasks = class
+  strict private
+    FList : TObjectList;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    function Count : integer;
+    function Get(const aIndex : integer) : TccScheduledTask;
+    function Add : TccScheduledTask;
   end;
 
 
@@ -76,14 +95,43 @@ uses
 
 procedure RaiseWrongScheduleStringException (const aValue : String);
 begin
-  raise Exception.Create('Wrong format of cron schedule string: ' + aValue);
+  raise Exception.Create(Format(rsErrorWrongFormat, [aValue]));
+end;
+
+{ TccScheduledTasks }
+
+constructor TccScheduledTasks.Create;
+begin
+  FList := TObjectList.Create(true);
+end;
+
+destructor TccScheduledTasks.Destroy;
+begin
+  FList.Free;
+  inherited Destroy;
+end;
+
+function TccScheduledTasks.Count: integer;
+begin
+  Result := FList.Count;
+end;
+
+function TccScheduledTasks.Get(const aIndex: integer): TccScheduledTask;
+begin
+  Result := FList.Items[aIndex] as TccScheduledTask;
+end;
+
+function TccScheduledTasks.Add: TccScheduledTask;
+begin
+  Result := TccScheduledTask.Create;
+  FList.Add(Result);
 end;
 
 { TccSchedulation }
 
 constructor TccSchedulation.Create;
 begin
-  SetLength(Strings, ARRAY_SIZE - 1);
+  SetLength(Strings, ARRAY_SIZE);
   Self.Clear;
 end;
 
@@ -114,32 +162,21 @@ begin
         if (cur >= ARRAY_SIZE) then
           RaiseWrongScheduleStringException(aScheduleString);
         Strings[cur] := lastStr;
+        lastStr := '';
         inc(cur);
       end;
     end;
   end;
-  if cur < ARRAY_SIZE then
+  if lastStr <> '' then
+  begin
+    if (cur >= ARRAY_SIZE) then
+      RaiseWrongScheduleStringException(aScheduleString);
+    Strings[cur] := lastStr;
+  end;
+
+  if cur < ARRAY_SIZE - 1 then
     RaiseWrongScheduleStringException(aScheduleString);
 end;
-
-{ TccCronTab }
-
-constructor TccCronTab.Create;
-begin
-  FTasksList := TObjectList.Create(true);
-end;
-
-destructor TccCronTab.Destroy;
-begin
-  FTasksList.Free;
-  inherited Destroy;
-end;
-
-procedure TccCronTab.AddTask(const aScheduleString: String; const aTask: TccTaskProcedure);
-begin
-
-end;
-
 
 { TccScheduledTask }
 
@@ -152,8 +189,10 @@ end;
 
 constructor TccScheduledTask.Create;
 begin
-  FTaskProcedure := nil;
+  FTaskProcedureOfObject := nil;
+  FTaskProcedure:= nil;
   FScheduleString:= '';
+  FTaskDescription:= '';
   FDecodedSchedule:= TccSchedulation.Create;
 end;
 
@@ -243,7 +282,7 @@ end;
 
 function TccScheduledTask.MustRun(const aMinute, aHour, aDay, aMonth, aYear: word) : boolean;
 var
-  minOk, hourOk, dayOk, monthOk : boolean;
+  minOk, hourOk, dayOk, monthOk, yearOk : boolean;
   anyMin, anyHour, anyDay, anyMonth, anyYear : boolean;
   goOn : boolean;
 begin
@@ -251,20 +290,32 @@ begin
   minOk := CheckValue(FDecodedSchedule.Strings[TccSchedulation.MINUTE_IDX], aMinute, anyMin);
   if not minOk then
     exit;
-  goOn := ((not anyMin) or (aMinute=0));
-  hourOk := CheckValue(FDecodedSchedule.Strings[TccSchedulation.HOUR_IDX], aHour, anyHour) and goOn;
+  hourOk := CheckValue(FDecodedSchedule.Strings[TccSchedulation.HOUR_IDX], aHour, anyHour);
   if not hourOk then
     exit;
-  goOn := goOn and ((not anyHour) or (aHour = 0));
-  dayOk := CheckValue(FDecodedSchedule.Strings[TccSchedulation.DAY_IDX], aDay, anyDay) and goOn;
+  dayOk := CheckValue(FDecodedSchedule.Strings[TccSchedulation.DAY_IDX], aDay, anyDay);
   if not dayOk then
     exit;
-  goOn := goOn and ((not anyDay) or (aDay = 1));
-  monthOk := CheckValue(FDecodedSchedule.Strings[TccSchedulation.MONTH_IDX], aMonth, anyMonth) and goOn;
+  monthOk := CheckValue(FDecodedSchedule.Strings[TccSchedulation.MONTH_IDX], aMonth, anyMonth);
   if not monthOk then
     exit;
-  goOn := goOn and ((not anyMonth) or (aMonth = 1));
-  Result := CheckValue(FDecodedSchedule.Strings[TccSchedulation.YEAR_IDX], aYear, anyYear) and goOn;
+  yearOk := CheckValue(FDecodedSchedule.Strings[TccSchedulation.YEAR_IDX], aYear, anyYear);
+  if not yearOk then
+    exit;
+
+  if (not anyHour) and ((not anyMin) or (aMinute=0)) then
+    exit;
+
+  if (not anyDay) and ((not anyHour) or (aHour=0)) and ((not anyMin) or (aMinute=0)) then
+    exit;
+
+  if (not anyMonth) and ((not anyDay) or (aDay=1))  and ((not anyHour) or (aHour=0)) and ((not anyMin) or (aMinute=0)) then
+    exit;
+
+  if (not anyYear) and ((not anyMonth) or (aMonth = 1))  and ((not anyDay) or (aDay=1))  and ((not anyHour) or (aHour=0)) and ((not anyMin) or (aMinute=0)) then
+    exit;
+
+  Result := true;
 end;
 
 end.
