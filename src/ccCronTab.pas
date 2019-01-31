@@ -32,13 +32,14 @@ type
 
   TccSchedulation = class
   strict private
-    const ARRAY_SIZE = 5;
+    const ARRAY_SIZE = 6;
   public
     const MINUTE_IDX : integer = 0;
     const HOUR_IDX : integer = 1;
     const DAY_IDX : integer = 2;
     const MONTH_IDX : integer = 3;
-    const YEAR_IDX : integer = 4;
+    const WEEKDAY_IDX : integer = 4;
+    const YEAR_IDX : integer = 5;
   public
     Strings : array of String;
   public
@@ -64,7 +65,8 @@ type
     constructor Create;
     destructor Destroy; override;
 
-    function MustRun (const aMinute, aHour, aDay, aMonth, aYear : word) : boolean;
+    function MustRun (const aMinute, aHour, aDay, aMonth, aYear, aWeekday : word) : boolean; overload;
+    function MustRun (const aDateTime : TDateTime): boolean; overload;
 
     property TaskDescription : String read FTaskDescription write FTaskDescription;
     property TaskProcedureOfObject : TccTaskProcedureOfObject read FTaskProcedureOfObject write FTaskProcedureOfObject;
@@ -87,15 +89,27 @@ type
   end;
 
 
+  procedure ccDecodeDateTime(const aDateTime: TDateTime; out hour, minute, year, month, day, weekday : word);
+
+
 implementation
 
 uses
-  sysutils, strutils;
+  sysutils, dateutils;
 
 
 procedure RaiseWrongScheduleStringException (const aValue : String);
 begin
   raise Exception.Create(Format(rsErrorWrongFormat, [aValue]));
+end;
+
+procedure ccDecodeDateTime(const aDateTime: TDateTime; out hour, minute, year, month, day, weekday: word);
+var
+  second, millisecond : word;
+begin
+  DecodeDate(aDateTime, year, month, day);
+  DecodeTime(aDateTime, hour, minute, second, millisecond);
+  weekday:= DayOfTheWeek(aDateTime); // day-of-THE-week -> ISO 8601 compliant
 end;
 
 { TccScheduledTasks }
@@ -224,10 +238,8 @@ begin
     if TryStrToInt(Copy(aString, i + 1, 999), tmpValue1) then
     begin
       if (aValue mod tmpValue1) = 0 then
-      begin
         Result := true;
-        exit;
-      end;
+      exit;
     end
     else
       RaiseWrongScheduleStringException(aString);
@@ -248,10 +260,8 @@ begin
         RaiseWrongScheduleStringException(aString);
 
       if (aValue >= tmpValue1) and (aValue <= tmpValue2) then
-      begin
         Result := true;
-        exit;
-      end;
+      exit;
     finally
       list.Free;
     end;
@@ -269,22 +279,27 @@ begin
         if not TryStrToInt(Trim(list.Strings[k]), tmpValue1) then
           RaiseWrongScheduleStringException(aString);
         if aValue = tmpValue1 then
-        begin
           Result := true;
-          exit;
-        end;
+        exit;
       end;
     finally
       list.Free;
     end;
   end;
+
+  if TryStrToInt(aString, tmpValue1) then
+  begin
+    if (aValue = tmpValue1) then
+      Result := true;
+  end
+  else
+    RaiseWrongScheduleStringException(aString);
 end;
 
-function TccScheduledTask.MustRun(const aMinute, aHour, aDay, aMonth, aYear: word) : boolean;
+function TccScheduledTask.MustRun(const aMinute, aHour, aDay, aMonth, aYear, aWeekday: word) : boolean;
 var
-  minOk, hourOk, dayOk, monthOk, yearOk : boolean;
-  anyMin, anyHour, anyDay, anyMonth, anyYear : boolean;
-  goOn : boolean;
+  minOk, hourOk, dayOk, monthOk, weekdayOk, yearOk : boolean;
+  anyMin, anyHour, anyDay, anyMonth, anyWeekday, anyYear : boolean;
 begin
   Result := false;
   minOk := CheckValue(FDecodedSchedule.Strings[TccSchedulation.MINUTE_IDX], aMinute, anyMin);
@@ -299,23 +314,39 @@ begin
   monthOk := CheckValue(FDecodedSchedule.Strings[TccSchedulation.MONTH_IDX], aMonth, anyMonth);
   if not monthOk then
     exit;
+  weekdayOk:= CheckValue(FDecodedSchedule.Strings[TccSchedulation.WEEKDAY_IDX], aWeekDay, anyWeekDay);
+  if not weekdayOk then
+    exit;
   yearOk := CheckValue(FDecodedSchedule.Strings[TccSchedulation.YEAR_IDX], aYear, anyYear);
   if not yearOk then
     exit;
 
-  if (not anyHour) and ((not anyMin) or (aMinute=0)) then
+
+  minOk := (not anyMin) or (anyMin and (aMinute =0));
+  if (not anyHour) and (not minOk) then
     exit;
 
-  if (not anyDay) and ((not anyHour) or (aHour=0)) and ((not anyMin) or (aMinute=0)) then
+  hourOk := (not anyHour) or (anyHour and (aHour = 0));
+  if (not anyDay) and ((not hourOk) or (not minOk)) then
     exit;
 
-  if (not anyMonth) and ((not anyDay) or (aDay=1))  and ((not anyHour) or (aHour=0)) and ((not anyMin) or (aMinute=0)) then
+  dayOk := (not anyDay) or (anyDay and (aDay=1));
+  if (not anyMonth) and ((not hourOk) or (not minOk) or (not dayOk)) then
     exit;
 
-  if (not anyYear) and ((not anyMonth) or (aMonth = 1))  and ((not anyDay) or (aDay=1))  and ((not anyHour) or (aHour=0)) and ((not anyMin) or (aMinute=0)) then
+  monthOk := (not anyMonth) or (anyMonth and (aMonth=1));
+  if (not anyYear) and ((not hourOk) or (not minOk) or (not dayOk) or (not monthOk)) then
     exit;
 
   Result := true;
+end;
+
+function TccScheduledTask.MustRun(const aDateTime: TDateTime): boolean;
+var
+  hour, minute, year, month, day, weekday : word;
+begin
+  ccDecodeDateTime(aDateTime, hour, minute, year, month, day, weekday);
+  Result := Self.MustRun(minute, hour, day, month, year, weekday);
 end;
 
 end.

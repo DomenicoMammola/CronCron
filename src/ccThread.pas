@@ -57,7 +57,7 @@ type
 implementation
 
 uses
-  sysutils;
+  sysutils, dateutils;
 
 { TccExecutorThread }
 
@@ -107,22 +107,17 @@ end;
 procedure TccControlThread.Execute;
 var
   lastMinute, newMinute : integer;
-  hour, minute, second, millisecond : word;
-  year, month, day : word;
-  currentTime : TDateTime;
+  hour, minute : word;
+  year, month, day, weekday : word;
   i : integer;
   newDiedEvent : TSimpleEvent;
   wr : TWaitResult;
 begin
-  currentTime := Now;
-  DecodeDate(currentTime, year, month, day);
-  DecodeTime(currentTime, hour, minute, second, millisecond);
+  ccDecodeDateTime(Now, hour, minute, year, month, day, weekday);
   lastMinute := (hour * 1000) + minute;
   Sleep(SLEEPING_FOR_MILLISECONDS div 2);
   repeat
-    currentTime := Now;
-    DecodeDate(currentTime, year, month, day);
-    DecodeTime(currentTime, hour, minute, second, millisecond);
+    ccDecodeDateTime(Now, hour, minute, year, month, day, weekday);
     newMinute := (hour * 1000) + minute;
     if lastMinute <> newMinute then
     begin
@@ -130,7 +125,7 @@ begin
       lastMinute := newMinute;
       for i := 0 to FTasks.Count - 1 do
       begin
-        if FTasks.Get(i).MustRun(minute, hour, day, month, year) then
+        if FTasks.Get(i).MustRun(minute, hour, day, month, year, weekday) then
         begin
           newDiedEvent := TSimpleEvent.Create;
           FDiedEvents.Add(newDiedEvent);
