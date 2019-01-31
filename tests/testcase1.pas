@@ -62,6 +62,10 @@ begin
     CheckTrue(tmpTask.MustRun(tmpDate));
     tmpDate := EncodeDateTime(2019,1,15,12,00,0,0); // tuesday 12:00 15/01/2019
     CheckFalse(tmpTask.MustRun(tmpDate));
+    tmpDate := EncodeDateTime(2019,2,18,13,15,0,0); // monday 13:15 18/02/2019
+    CheckFalse(tmpTask.MustRun(tmpDate));
+    tmpDate := EncodeDateTime(2019,2,18,11,45,0,0); // monday 11:45 18/02/2019
+    CheckTrue(tmpTask.MustRun(tmpDate));
 
 
   finally

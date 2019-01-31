@@ -1,6 +1,7 @@
 # CronCron
-This library implements a simple Cron-like system that can be embedded in any pascal application.
-Somehow similar to (still developed?) Cromis library even without all its features but simple and it can handle a standard Cron schedule string in the format:
+This library implements a simple Cron-like system that can be embedded in any pascal application.<br />
+Somehow similar to (still alive?) Cromis library (but without all its features).<br />
+It can handle a standard Cron schedule string in the format:
 ```
 * * * * * *
 | | | | | |
