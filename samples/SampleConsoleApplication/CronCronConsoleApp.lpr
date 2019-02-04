@@ -9,7 +9,7 @@ uses
   Classes, SysUtils, CustApp
   { you can add units after this }
   ,eventlog, syncobjs
-  ,ccThread, ccCronTab;
+  ,ccCron, ccCronTab;
 
 type
 
@@ -20,9 +20,9 @@ type
   TCronCronConsole = class(TCustomApplication)
   strict private
     FEventLog : TEventLog;
-    procedure Test1Minute(aCheckTerminated : TCheckTerminatedProcedure);
-    procedure Test2Minutes(aCheckTerminated : TCheckTerminatedProcedure);
-    procedure Test3Minutes(aCheckTerminated : TCheckTerminatedProcedure);
+    procedure Test1Minute(aCheckTerminated : TCheckTerminatedProcedure; aEventLog : TEventLog);
+    procedure Test2Minutes(aCheckTerminated : TCheckTerminatedProcedure; aEventLog : TEventLog);
+    procedure Test3Minutes(aCheckTerminated : TCheckTerminatedProcedure; aEventLog : TEventLog);
   protected
     procedure DoRun; override;
   public
@@ -33,29 +33,25 @@ type
 
 { TCronCronConsole }
 
-procedure TCronCronConsole.Test1Minute(aCheckTerminated: TCheckTerminatedProcedure);
+procedure TCronCronConsole.Test1Minute(aCheckTerminated: TCheckTerminatedProcedure; aEventLog : TEventLog);
 begin
-  FEventLog.Info('1 minute! ' + DateTimeToStr(Now));
+  aEventLog.Info('1 minute! ' + DateTimeToStr(Now));
 end;
 
-procedure TCronCronConsole.Test2Minutes(aCheckTerminated: TCheckTerminatedProcedure);
+procedure TCronCronConsole.Test2Minutes(aCheckTerminated: TCheckTerminatedProcedure; aEventLog : TEventLog);
 begin
-  FEventLog.Info('2 minutes! ' + DateTimeToStr(Now));
+  aEventLog.Info('2 minutes! ' + DateTimeToStr(Now));
 end;
 
-procedure TCronCronConsole.Test3Minutes(aCheckTerminated: TCheckTerminatedProcedure);
+procedure TCronCronConsole.Test3Minutes(aCheckTerminated: TCheckTerminatedProcedure; aEventLog : TEventLog);
 begin
-  FEventLog.Info('3 minutes! ' + DateTimeToStr(Now));
+  aEventLog.Info('3 minutes! ' + DateTimeToStr(Now));
 end;
 
 procedure TCronCronConsole.DoRun;
 var
-  ErrorMsg: String;
-  CntThread: TccControlThread;
-  tmpDiedEvent : TSimpleEvent;
-  i : integer;
-  wr : TWaitResult;
-  FScheduledTasks : TccScheduledTasks;
+  cron : TccCron;
+  ErrorMsg : String;
 begin
   // quick check parameters
   ErrorMsg:=CheckOptions('h', 'help');
@@ -74,75 +70,55 @@ begin
 
   { add your program here }
 
-  tmpDiedEvent := TSimpleEvent.Create;
   FEventLog:=TEventlog.Create(nil);
-  FScheduledTasks := TccScheduledTasks.Create;
+  cron := TccCron.Create(FEventLog);
   try
     //tmpEventLog.RaiseExceptionOnError:=False;
     FEventLog.LogType:=ltFile;
-    FEventLog.FileName:= 'log.txt'; // IncludeTrailingPathDelimiter(ExtractFileDir(ApplicationName)) + 'log.txt';
+    FEventLog.FileName:= 'log.txt';
     FEventLog.Active:= true;
-    tmpDiedEvent.ResetEvent;
 
-    with FScheduledTasks.Add do
+    with cron.Tasks.Add do
     begin
       TaskDescription:= '2 minutes';
       TaskProcedureOfObject:= @Test2Minutes;
-      ScheduleString:= '*/2 * * * *';
+      ScheduleString:= '*/2 * * * * *';
     end;
 
-    with FScheduledTasks.Add do
+    with cron.Tasks.Add do
     begin
       TaskDescription:= '3 minutes';
       TaskProcedureOfObject:= @Test3Minutes;
-      ScheduleString:= '*/3 * * * *';
+      ScheduleString:= '*/3 * * * * *';
     end;
 
-    with FScheduledTasks.Add do
+    with cron.Tasks.Add do
     begin
       TaskDescription:= '1 minute';
       TaskProcedureOfObject:= @Test1Minute;
-      ScheduleString:= '*/1 * * * *';
+      ScheduleString:= '*/1 * * * * *';
     end;
 
-    CntThread := TccControlThread.Create(FEventLog, tmpDiedEvent, FScheduledTasks);
+    cron.Start;
 
     WriteLn('Press ENTER to stop thread');
     ReadLn;
 
-    CntThread.Terminate;
-
-    wr := tmpDiedEvent.WaitFor(1000);
-    i := 0;
-    while (wr = wrTimeout) and (i < 20) do
+    if cron.Stop then
     begin
-      WriteLn('Thread stopping, waiting..');
-      FEventLog.Info('Thread stopping, waiting..');
-      wr := tmpDiedEvent.WaitFor(1000);
-      inc(i);
-    end;
-
-    if wr = wrSignaled then
-    begin
-      WriteLn('Thread stopped successfully');
-      FEventLog.Info('Thread stopped successfully');
-    end
-    else if wr = wrTimeout then
-    begin
-      WriteLn('Timeout while waiting that thread stops');
-      FEventLog.Error('Timeout while waiting that thread stops');
+      WriteLn('Cron stopped successfully');
+      FEventLog.Info('Cron stopped successfully');
     end
     else
     begin
-      WriteLn('Unable to stop thread');
-      FEventLog.Error('Unable to stop thread');
+      WriteLn('Unable to stop cron');
+      FEventLog.Error('Unable to stop cron');
     end;
     WriteLn('Finished');
     FEventLog.Info('Finished');
   finally
     FEventLog.Free;
-    tmpDiedEvent.Free;
-    FScheduledTasks.Free;
+    cron.Free;
   end;
 
   WriteLn('Press ENTER to exit');
