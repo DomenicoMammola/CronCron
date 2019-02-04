@@ -15,7 +15,7 @@ unit ccCronTab;
 
 interface
 uses
-  Classes, contnrs;
+  Classes, contnrs, eventlog, syncobjs;
 
 // https://help.ubuntu.com/community/CronHowto
 
@@ -25,8 +25,8 @@ resourcestring
 type
 
   TCheckTerminatedProcedure = function : boolean of object;
-  TccTaskProcedureOfObject = procedure (aCheckTerminated : TCheckTerminatedProcedure) of Object;
-  TccTaskProcedure = procedure (aCheckTerminated : TCheckTerminatedProcedure);
+  TccTaskProcedureOfObject = procedure (aCheckTerminated : TCheckTerminatedProcedure; aEventLog : TEventLog) of Object;
+  TccTaskProcedure = procedure (aCheckTerminated : TCheckTerminatedProcedure; aEventLog : TEventLog);
 
   { FSchedulation }
 
@@ -86,8 +86,8 @@ type
     function Count : integer;
     function Get(const aIndex : integer) : TccScheduledTask;
     function Add : TccScheduledTask;
+    procedure Clear;
   end;
-
 
   procedure ccDecodeDateTime(const aDateTime: TDateTime; out hour, minute, year, month, day, weekday : word);
 
@@ -139,6 +139,11 @@ function TccScheduledTasks.Add: TccScheduledTask;
 begin
   Result := TccScheduledTask.Create;
   FList.Add(Result);
+end;
+
+procedure TccScheduledTasks.Clear;
+begin
+  FList.Clear;
 end;
 
 { TccSchedulation }

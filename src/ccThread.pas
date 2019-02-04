@@ -46,11 +46,12 @@ type
 
   TccExecutorThread = class(TThread)
   strict private
+    FLog: TEventLog;
     FDiedEvent: TSimpleEvent;
     FTask : TccScheduledTask;
     FCheckTerminatedProcedure : TCheckTerminatedProcedure;
   public
-    constructor Create(aDiedEvent : TSimpleEvent; aTask : TccScheduledTask; aCheckTerminatedProcedure: TCheckTerminatedProcedure);
+    constructor Create(aLog : TEventLog; aDiedEvent : TSimpleEvent; aTask : TccScheduledTask; aCheckTerminatedProcedure: TCheckTerminatedProcedure);
     procedure Execute; override;
   end;
 
@@ -61,21 +62,22 @@ uses
 
 { TccExecutorThread }
 
-constructor TccExecutorThread.Create(aDiedEvent: TSimpleEvent; aTask: TccScheduledTask; aCheckTerminatedProcedure: TCheckTerminatedProcedure);
+constructor TccExecutorThread.Create(aLog : TEventLog; aDiedEvent: TSimpleEvent; aTask: TccScheduledTask; aCheckTerminatedProcedure: TCheckTerminatedProcedure);
 begin
   FreeOnTerminate:= true;
   FDiedEvent := aDiedEvent;
   FTask := aTask;
   FCheckTerminatedProcedure:= aCheckTerminatedProcedure;
+  FLog := aLog;
   inherited Create(false);
 end;
 
 procedure TccExecutorThread.Execute;
 begin
   if Assigned(FTask.TaskProcedureOfObject) then
-    FTask.TaskProcedureOfObject(FCheckTerminatedProcedure)
+    FTask.TaskProcedureOfObject(FCheckTerminatedProcedure, FLog)
   else if Assigned(FTask.TaskProcedure) then
-    FTask.TaskProcedure(FCheckTerminatedProcedure);
+    FTask.TaskProcedure(FCheckTerminatedProcedure, FLog);
   FDiedEvent.SetEvent;
 end;
 
@@ -130,7 +132,7 @@ begin
           newDiedEvent := TSimpleEvent.Create;
           FDiedEvents.Add(newDiedEvent);
           newDiedEvent.ResetEvent;
-          TccExecutorThread.Create(newDiedEvent, FTasks.Get(i), Self.CheckTerminated);
+          TccExecutorThread.Create(FLog, newDiedEvent, FTasks.Get(i), Self.CheckTerminated);
         end;
       end;
     end;
