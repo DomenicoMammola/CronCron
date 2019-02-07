@@ -15,7 +15,7 @@ unit ccCronTab;
 
 interface
 uses
-  Classes, contnrs, eventlog, syncobjs;
+  Classes, contnrs;
 
 // https://help.ubuntu.com/community/CronHowto
 
@@ -25,8 +25,8 @@ resourcestring
 type
 
   TCheckTerminatedProcedure = function : boolean of object;
-  TccTaskProcedureOfObject = procedure (aCheckTerminated : TCheckTerminatedProcedure; aEventLog : TEventLog) of Object;
-  TccTaskProcedure = procedure (aCheckTerminated : TCheckTerminatedProcedure; aEventLog : TEventLog);
+  TccTaskProcedureOfObject = procedure (aCheckTerminated : TCheckTerminatedProcedure) of Object;
+  TccTaskProcedure = procedure (aCheckTerminated : TCheckTerminatedProcedure);
 
   { FSchedulation }
 
