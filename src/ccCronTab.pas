@@ -284,9 +284,12 @@ begin
         if not TryStrToInt(Trim(list.Strings[k]), tmpValue1) then
           RaiseWrongScheduleStringException(aString);
         if aValue = tmpValue1 then
+        begin
           Result := true;
-        exit;
+          exit;
+        end;
       end;
+      exit;
     finally
       list.Free;
     end;
